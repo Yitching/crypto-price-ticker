@@ -1,6 +1,7 @@
 import type { AggregatedQuote, ConnectionState, ProviderQuote } from '../core/types';
-import type { ProviderAdapter, QuoteSink } from '../providers/types';
+import type { ProviderAdapter, QuoteSink, ProviderSpec } from '../providers/types';
 import { QuoteBook } from './aggregator';
+import { createAdapter as defaultCreateAdapter } from '../providers/registry';
 
 export interface FeedStats {
   /** Raw updates received from providers in the last second. */
@@ -21,33 +22,50 @@ export interface FeedOptions {
   conflate: boolean;
 }
 
+export interface FeedConfig {
+  readonly symbols: readonly string[];
+  readonly providers: readonly ProviderSpec[];
+  readonly options: FeedOptions;
+}
+
 const DEFAULT_OPTIONS: FeedOptions = { flushIntervalMs: 16, staleAfterMs: 30_000, conflate: true };
 
 export class FeedEngine {
   private readonly out: FeedOutput;
-  private readonly options: FeedOptions;
   private readonly book = new QuoteBook();
   private readonly dirty = new Set<string>();
+  private readonly createAdapter: (spec: ProviderSpec) => ProviderAdapter;
   private adapters: ProviderAdapter[] = [];
   private timers: ReturnType<typeof setInterval>[] = [];
   private ticks = 0;
   private running = false;
+  private options: FeedOptions = DEFAULT_OPTIONS;
 
-  constructor(out: FeedOutput, options: FeedOptions = DEFAULT_OPTIONS) {
+  constructor(out: FeedOutput, createAdapter = defaultCreateAdapter) {
     this.out = out;
-    this.options = options;
+    this.createAdapter = createAdapter; // tests can pass a fake
   }
 
-  start(symbols: readonly string[], adapters: ProviderAdapter[]): void {
+  start(config: FeedConfig): void {
     this.stop();
     this.running = true;
-    this.adapters = adapters;
+    this.options = config.options;
 
     const sink: QuoteSink = {
       quote: (q) => this.onQuote(q),
       status: (provider, state, detail) => this.onStatus(provider, state, detail),
     };
-    for (const adapter of adapters) adapter.start(symbols, sink);
+
+    for (const spec of config.providers) {
+      try {
+        const adapter = this.createAdapter(spec);
+        this.adapters.push(adapter);
+        adapter.start(config.symbols, sink);
+      } catch (error) {
+        // One broken provider must not take the others down.
+        this.out.status(spec.kind, 'closed', error instanceof Error ? error.message : String(error));
+      }
+    }
 
     this.timers.push(
       setInterval(() => this.flush(), this.options.flushIntervalMs),

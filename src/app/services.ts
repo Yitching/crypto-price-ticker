@@ -1,19 +1,17 @@
 import { createContext, useContext } from 'react';
 import { LIVE_SYMBOLS, stressSymbols } from '../config/symbols';
-import { FeedEngine, type FeedStats } from '../feed/FeedEngine';
-import { BinanceAdapter } from '../providers/binance';
-import { CoinbaseAdapter } from '../providers/coinbase';
-import { KrakenAdapter } from '../providers/kraken';
-import { SimulatorAdapter } from '../providers/simulators';
-import type { ProviderAdapter } from '../providers/types';
 import { QuoteStore, frameScheduler, immediateScheduler } from '../store/QuoteStore';
 import { ValueStore } from '../store/ValueStore';
+import { createFeedClient } from '../feed/FeedClient';
+import type { FeedStats } from '../feed/FeedEngine';
+import type { ProviderSpec } from '../providers/types';
 
 export interface AppConfig {
   mode: 'live' | 'stress';
   conflate: boolean;
   stressCount: number;
   stressRate: number;
+  useWorker: boolean;
 }
 
 /** Composition root: builds and starts everything, once. */
@@ -23,24 +21,28 @@ export function createServices(config: AppConfig) {
   const statuses = new ValueStore<Record<string, string>>({});
   const stats = new ValueStore<FeedStats | null>(null);
 
-  const engine = new FeedEngine(
+  const feed = createFeedClient(
     {
       quotes: (batch) => quotes.ingest(batch),
       status: (provider, state, detail) =>
         statuses.set((prev) => ({ ...prev, [provider]: detail ? `${state} (${detail})` : state })),
       stats: (s) => stats.set(s),
     },
-    { flushIntervalMs: 16, staleAfterMs: 30_000, conflate: config.conflate },
+    config.useWorker,
   );
 
-  const adapters: ProviderAdapter[] =
+  const providers: ProviderSpec[] =
     config.mode === 'stress'
-      ? [new SimulatorAdapter({ ratePerSecond: config.stressRate, venues: ['sim-a', 'sim-b', 'sim-c'] })]
-      : [new KrakenAdapter(), new CoinbaseAdapter(), new BinanceAdapter()];
-  engine.start(symbols, adapters);
+      ? [{ kind: 'simulator', options: { ratePerSecond: config.stressRate, venues: ['sim-a', 'sim-b', 'sim-c'] } }]
+      : [{ kind: 'kraken' }, { kind: 'coinbase' }, { kind: 'binance' }];
 
-  return { config, symbols, quotes, statuses, stats };
-}
+  feed.start({
+    symbols,
+    providers,
+    options: { flushIntervalMs: 16, staleAfterMs: 30_000, conflate: config.conflate },
+  });
+
+  return { config, symbols, quotes, statuses, stats, feed };}
 
 export type Services = ReturnType<typeof createServices>;
 

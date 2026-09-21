@@ -12,3 +12,9 @@ export interface ProviderAdapter {
   start(symbols: readonly string[], sink: QuoteSink): void;
   stop(): void;
 }
+
+/** A serialisable description of an adapter, so it can be sent to the worker. */
+export interface ProviderSpec {
+  readonly kind: string;
+  readonly options?: unknown;
+}

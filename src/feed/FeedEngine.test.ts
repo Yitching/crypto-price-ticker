@@ -6,6 +6,7 @@ import { FeedEngine } from './FeedEngine';
 class FakeAdapter implements ProviderAdapter {
   readonly id = 'fake';
   private sink: QuoteSink | null = null;
+  
   start(_symbols: readonly string[], sink: QuoteSink) {
     this.sink = sink;
   }
@@ -25,8 +26,11 @@ describe('FeedEngine', () => {
     const batches: (readonly AggregatedQuote[])[] = [];
     const engine = new FeedEngine({ quotes: (b) => batches.push(b), status: () => {}, stats: () => {} });
     const adapter = new FakeAdapter();
-    engine.start(['BTC/USD', 'ETH/USD'], [adapter]);
-
+    engine.start({
+      symbols: ['BTC/USD', 'ETH/USD'],
+      providers: [{ kind: 'fake' }],
+      options: { flushIntervalMs: 16, staleAfterMs: 30_000, conflate: true },
+    });
     for (let i = 0; i < 50; i++) adapter.push('BTC/USD', 100 + i);
     adapter.push('ETH/USD', 10);
     vi.advanceTimersByTime(16);
