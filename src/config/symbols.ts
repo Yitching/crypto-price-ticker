@@ -1,0 +1,1 @@
+export const SYMBOLS: readonly string[] = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'ADA/USD', 'DOGE/USD'];
