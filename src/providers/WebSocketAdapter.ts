@@ -1,5 +1,5 @@
 import type { QuoteSink, ProviderAdapter } from './types';
-
+import { ReconnectingSocket } from './ReconnectingSockets';
 /** A quote in the provider's own naming, before mapping to canonical symbols. */
 export interface RawQuote {
   readonly providerSymbol: string;
@@ -17,31 +17,30 @@ export abstract class WebSocketAdapter implements ProviderAdapter {
   /** Pure: one decoded message in, quotes out. Returns [] for anything else. */
   abstract parse(message: unknown): RawQuote[];
 
-  private ws: WebSocket | null = null;
+  private socket: ReconnectingSocket | null = null;
   private toCanonical = new Map<string, string>();
 
-  start(symbols: readonly string[], sink: QuoteSink): void {
+ start(symbols: readonly string[], sink: QuoteSink): void {
     this.stop();
     this.toCanonical = new Map(symbols.map((s) => [this.toProviderSymbol(s), s]));
     const providerSymbols = [...this.toCanonical.keys()];
 
-    const ws = new WebSocket(this.url);
-    this.ws = ws;
-    sink.status(this.id, 'connecting');
-
-    ws.onopen = () => {
-      sink.status(this.id, 'open');
-      for (const message of this.subscribeMessages(providerSymbols)) ws.send(JSON.stringify(message));
-    };
-    ws.onmessage = (event: MessageEvent<string>) => this.handleMessage(event.data, sink);
-    ws.onclose = () => sink.status(this.id, 'closed');
+    const socket = new ReconnectingSocket(this.url, {
+      // Runs on EVERY connect, including reconnects.
+      onOpen: (send) => {
+        for (const message of this.subscribeMessages(providerSymbols)) send(JSON.stringify(message));
+      },
+      onMessage: (data) => this.handleMessage(data, sink),
+      onState: (state, detail) => sink.status(this.id, state, detail),
+    });
+    this.socket = socket;
+    socket.open();
   }
 
   stop(): void {
-    if (!this.ws) return;
-    this.ws.onclose = null; // we're closing on purpose; don't report it as a drop
-    this.ws.close();
-    this.ws = null;
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close();
   }
 
   private handleMessage(data: string, sink: QuoteSink): void {

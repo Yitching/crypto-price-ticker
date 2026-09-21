@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ConnectionState, ProviderQuote } from './core/types';
+import type { ProviderQuote } from './core/types';
 import { BinanceAdapter } from './providers/binance';
 import { CoinbaseAdapter } from './providers/coinbase';
 import { KrakenAdapter } from './providers/kraken';
@@ -9,14 +9,13 @@ const SYMBOLS = ['BTC/USD', 'ETH/USD'];
 
 export default function App() {
   const [quotes, setQuotes] = useState<Record<string, ProviderQuote>>({});
-  const [statuses, setStatuses] = useState<Record<string, ConnectionState>>({});
-
+  const [statuses, setStatuses] = useState<Record<string, string>>({});
   useEffect(() => {
     const adapters = [new KrakenAdapter(), new CoinbaseAdapter(), new BinanceAdapter()];
     const sink: QuoteSink = {
-      quote: (q) => setQuotes((prev) => ({ ...prev, [`${q.symbol}|${q.provider}`]: q })),
-      status: (provider, state) => setStatuses((prev) => ({ ...prev, [provider]: state })),
-    };
+    quote: (q) => setQuotes((prev) => ({ ...prev, [`${q.symbol}|${q.provider}`]: q })),
+    status: (provider, state, detail) =>
+    setStatuses((prev) => ({ ...prev, [provider]: detail ? `${state} (${detail})` : state })),    };
     for (const adapter of adapters) adapter.start(SYMBOLS, sink);
     return () => {
       for (const adapter of adapters) adapter.stop();

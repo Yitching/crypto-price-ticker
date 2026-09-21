@@ -23,4 +23,4 @@ export interface AggregatedQuote {
   readonly sources: readonly ProviderQuote[];
 }
 
-export type ConnectionState = 'connecting' | 'open' | 'closed';
+export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'closed';
