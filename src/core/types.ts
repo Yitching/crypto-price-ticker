@@ -22,3 +22,5 @@ export interface AggregatedQuote {
   readonly ask: PriceLevel | null;
   readonly sources: readonly ProviderQuote[];
 }
+
+export type ConnectionState = 'connecting' | 'open' | 'closed';

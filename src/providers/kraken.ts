@@ -1,36 +1,52 @@
-import type { ProviderQuote } from '../core/types';
 import { isRecord } from '../utils/guards';
-
-export const KRAKEN_URL = 'wss://ws.kraken.com/v2';
-
-// bbo makes event trigger only when best bid or best ask changes, trades makes event trigger on every trade. We only want bbo.\
-// based on https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/ticker
-type KrakenEventTrigger = 'bbo' | 'trades'; 
-interface KrakenTickerSubscribe {
-  method: 'subscribe';
-  params: {
-    channel: 'ticker';
-    symbol: string[];
-    event_trigger?: KrakenEventTrigger;
-    snapshot?: boolean;
-  };
+import { WebSocketAdapter, type RawQuote } from './WebSocketAdapter';
+/**
+ * {
+    "channel": "ticker",
+    "type": "update",
+    "data": [
+        {
+            "symbol": "ETH/USD",
+            "bid": 2727,
+            "bid_qty": 1.71170942,
+            "ask": 2727.01,
+            "ask_qty": 4.14973056,
+            "last": 2727.05,
+            "volume": 59206.59864743,
+            "vwap": 2662.38,
+            "low": 2573.6,
+            "high": 2748.87,
+            "change": 149.98,
+            "change_pct": 5.82,
+            "trades": 81314,
+            "timestamp": "2026-09-21T12:53:29.601494Z"
+        }
+    ]
 }
+ */
+/** Kraken spot WebSocket v2, ticker channel. */
+export class KrakenAdapter extends WebSocketAdapter {
+  readonly id = 'kraken';
+  protected readonly url = 'wss://ws.kraken.com/v2';
 
-export function krakenSubscribe(symbols: string[]): KrakenTickerSubscribe {
-  return { method: 'subscribe', params: { channel: 'ticker', symbol: symbols, event_trigger: 'bbo' } };
-}
-
-/** Returns quotes from one Kraken message, or [] for anything else. */
-export function parseKraken(message: unknown, now: number): ProviderQuote[] {
-    // sometimes receive message.channel === 'heartbeat' which keeps the connection alive, but has no price data. 
-    // sometimes receive message.channel === 'systemStatus' which is just a status message.
-  if (!isRecord(message) || message.channel !== 'ticker' || !Array.isArray(message.data)) return [];
-  const quotes: ProviderQuote[] = [];
-  for (const item of message.data as unknown[]) {
-    if (!isRecord(item)) continue;
-    const { symbol, bid, ask } = item;
-    if (typeof symbol !== 'string' || typeof bid !== 'number' || typeof ask !== 'number') continue;
-    quotes.push({ provider: 'kraken', symbol, bid, ask, ts: now });
+  protected toProviderSymbol(symbol: string): string {
+    return symbol; // Kraken v2 already uses "BTC/USD"
   }
-  return quotes;
+
+  protected subscribeMessages(symbols: string[]): unknown[] {
+    return [{ method: 'subscribe', params: { channel: 'ticker', symbol: symbols, event_trigger: 'bbo' } }];
+  }
+
+  parse(message: unknown): RawQuote[] {
+    console.log('Kraken message', message);
+    if (!isRecord(message) || message.channel !== 'ticker' || !Array.isArray(message.data)) return [];
+    const quotes: RawQuote[] = [];
+    for (const item of message.data as unknown[]) {
+      if (!isRecord(item)) continue;
+      const { symbol, bid, ask } = item;
+      if (typeof symbol !== 'string' || typeof bid !== 'number' || typeof ask !== 'number') continue;
+      quotes.push({ providerSymbol: symbol, bid, ask });
+    }
+    return quotes;
+  }
 }
