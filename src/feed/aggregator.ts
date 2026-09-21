@@ -63,4 +63,8 @@ export class QuoteBook {
     }
     return affected;
   }
+
+  clear(): void {
+    this.bySymbol.clear();
+  }
 }

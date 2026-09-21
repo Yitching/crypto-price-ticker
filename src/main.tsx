@@ -3,11 +3,15 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import { ServicesContext, createServices } from './app/services';
-import { SYMBOLS } from './config/symbols';
-import { startFeed } from './feed/startFeed';
 
-const services = createServices();
-startFeed(SYMBOLS, services.quotes, services.statuses);
+const params = new URLSearchParams(window.location.search);
+
+const services = createServices({
+  mode: params.get('mode') === 'stress' ? 'stress' : 'live',
+  conflate: params.get('conflate') !== 'off',
+  stressCount: Number(params.get('count') ?? '60'),
+  stressRate: Number(params.get('rate') ?? '100'),
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

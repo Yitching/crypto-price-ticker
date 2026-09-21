@@ -1,13 +1,35 @@
 import type { AggregatedQuote } from '../core/types';
 
-/** Latest aggregated quote per symbol. Notifies only that symbol's subscribers. */
+/** Decides when buffered quotes are applied. */
+export type Scheduler = (flush: () => void) => void;
+
+/** Once per screen repaint. */
+export const frameScheduler: Scheduler = (flush) => {
+  requestAnimationFrame(() => flush());
+};
+
+/** Immediately. Used for "conflation off" and in tests. */
+export const immediateScheduler: Scheduler = (flush) => flush();
+
 export class QuoteStore {
   private readonly quotes = new Map<string, AggregatedQuote>();
+  private readonly pending = new Map<string, AggregatedQuote>();
   private readonly listeners = new Map<string, Set<() => void>>();
+  private readonly schedule: Scheduler;
+  private scheduled = false;
+  private applied = 0;
+  private flushes = 0;
 
-  set(quote: AggregatedQuote): void {
-    this.quotes.set(quote.symbol, quote);
-    this.listeners.get(quote.symbol)?.forEach((listener) => listener());
+  constructor(schedule: Scheduler = frameScheduler) {
+    this.schedule = schedule;
+  }
+
+  ingest(batch: readonly AggregatedQuote[]): void {
+    for (const quote of batch) this.pending.set(quote.symbol, quote); // latest wins
+    if (!this.scheduled && this.pending.size > 0) {
+      this.scheduled = true;
+      this.schedule(this.flush);
+    }
   }
 
   get(symbol: string): AggregatedQuote | undefined {
@@ -26,4 +48,24 @@ export class QuoteStore {
       if (set.size === 0) this.listeners.delete(symbol);
     };
   }
+
+  /** Symbol updates applied so far (for the stats display). */
+  get appliedCount(): number {
+    return this.applied;
+  }
+
+  /** Times the store has pushed changes to React (for the stats display). */
+  get flushCount(): number {
+    return this.flushes;
+  }
+
+  private readonly flush = (): void => {
+    this.scheduled = false;
+    const changed = [...this.pending.values()];
+    this.pending.clear();
+    for (const quote of changed) this.quotes.set(quote.symbol, quote);
+    this.applied += changed.length;
+    this.flushes++;
+    for (const quote of changed) this.listeners.get(quote.symbol)?.forEach((listener) => listener());
+  };
 }

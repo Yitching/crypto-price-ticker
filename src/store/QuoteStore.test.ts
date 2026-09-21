@@ -16,9 +16,7 @@ describe('QuoteStore', () => {
     const eth = vi.fn();
     store.subscribe('BTC/USD', btc);
     store.subscribe('ETH/USD', eth);
-
-    store.set(quote('BTC/USD', 100));
-
+    store.ingest([quote('BTC/USD', 100)]);
     expect(btc).toHaveBeenCalledOnce();
     expect(eth).not.toHaveBeenCalled();
     expect(store.get('BTC/USD')?.bid?.price).toBe(100);
@@ -29,7 +27,25 @@ describe('QuoteStore', () => {
     const listener = vi.fn();
     const unsubscribe = store.subscribe('BTC/USD', listener);
     unsubscribe();
-    store.set(quote('BTC/USD', 100));
+    store.ingest([quote('BTC/USD', 100)]);
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('applies only the latest quote per symbol, once per frame', () => {
+    let runFrame = () => {};
+    const store = new QuoteStore((flush) => {
+        runFrame = flush;
+    });
+    const listener = vi.fn();
+    store.subscribe('BTC/USD', listener);
+
+    store.ingest([quote('BTC/USD', 100)]);
+    store.ingest([quote('BTC/USD', 101)]);
+    store.ingest([quote('BTC/USD', 102)]);
+    expect(listener).not.toHaveBeenCalled(); // nothing until the frame
+
+    runFrame();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(store.get('BTC/USD')?.bid?.price).toBe(102);
   });
 });
