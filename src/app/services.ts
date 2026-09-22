@@ -1,13 +1,15 @@
 import { createContext, useContext } from 'react';
-import { stressInstruments } from '../config/symbols';
 import { LIVE_INSTRUMENTS } from '../core/instruments';
+import type { ConnectionState } from '../core/types';
+import { stressInstruments } from '../config/symbols';
+import { createFeedClient } from '../feed/FeedClient';
+import type { FeedStats } from '../feed/FeedEngine';
+import type { ProviderSpec } from '../providers/types';
+import { MidHistory } from '../store/MidHistory';
 import { QuoteStore, frameScheduler, immediateScheduler } from '../store/QuoteStore';
 import { ValueStore } from '../store/ValueStore';
 import { SimulatedVenue } from '../trading/SimulatedVenue';
 import { TradeService } from '../trading/TradeService';
-import { createFeedClient } from '../feed/FeedClient';
-import type { FeedStats } from '../feed/FeedEngine';
-import type { ProviderSpec } from '../providers/types';
 
 export interface AppConfig {
   mode: 'live' | 'stress';
@@ -17,19 +19,23 @@ export interface AppConfig {
   useWorker: boolean;
 }
 
+export interface ProviderStatus {
+  readonly state: ConnectionState;
+  readonly detail?: string;
+}
+
 /** Composition root: builds and starts everything, once. */
 export function createServices(config: AppConfig) {
   const instruments = config.mode === 'stress' ? stressInstruments(config.stressCount) : [...LIVE_INSTRUMENTS];
   const symbols = instruments.map((i) => i.symbol);
   const quotes = new QuoteStore(config.conflate ? frameScheduler : immediateScheduler);
-  const statuses = new ValueStore<Record<string, string>>({});
+  const statuses = new ValueStore<Record<string, ProviderStatus>>({});
   const stats = new ValueStore<FeedStats | null>(null);
 
   const feed = createFeedClient(
     {
       quotes: (batch) => quotes.ingest(batch),
-      status: (provider, state, detail) =>
-        statuses.set((prev) => ({ ...prev, [provider]: detail ? `${state} (${detail})` : state })),
+      status: (provider, state, detail) => statuses.set((prev) => ({ ...prev, [provider]: { state, detail } })),
       stats: (s) => stats.set(s),
     },
     config.useWorker,
@@ -49,7 +55,16 @@ export function createServices(config: AppConfig) {
   // Trades execute against the price that is on screen.
   const trading = new TradeService(new SimulatedVenue((symbol) => quotes.get(symbol)));
 
-  return { config, instruments, symbols, quotes, statuses, stats, feed, trading };
+  // Sparklines: sample each mid once a second, not on every tick.
+  const history = new MidHistory(60);
+  setInterval(() => {
+    for (const symbol of symbols) {
+      const q = quotes.get(symbol);
+      if (q?.bid && q.ask) history.record(symbol, (q.bid.price + q.ask.price) / 2);
+    }
+  }, 1000);
+
+  return { config, instruments, symbols, quotes, statuses, stats, feed, trading, history };
 }
 
 export type Services = ReturnType<typeof createServices>;

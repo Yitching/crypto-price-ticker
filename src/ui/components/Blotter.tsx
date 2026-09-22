@@ -1,30 +1,36 @@
+import { useMemo } from 'react';
 import { useServices } from '../../app/services';
 import { providerLabel } from '../../config/providers';
 import { baseCurrency, inferPrecision } from '../../core/instruments';
+import type { Instrument } from '../../core/types';
 import { useValue } from '../../store/hooks';
 import type { Trade } from '../../trading/types';
 import { formatPrice, formatQuantity } from '../../utils/priceFormat';
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-function amountText(trade: Trade): string {
+/** Falls back to a guess only for a symbol that has since left the instrument list. */
+function amountText(trade: Trade, instrument: Instrument | undefined): string {
+  const sizeDecimals = instrument?.sizeDecimals ?? 6;
   if (trade.fill) {
     const base = baseCurrency(trade.request.symbol);
-    return `${formatQuantity(trade.fill.baseAmount, 6)} ${base}`;
+    return `${formatQuantity(trade.fill.baseAmount, sizeDecimals)} ${base}`;
   }
-  return `${formatQuantity(trade.request.amount, 6)} ${trade.request.dealtCurrency}`;
+  return `${formatQuantity(trade.request.amount, sizeDecimals)} ${trade.request.dealtCurrency}`;
 }
 
-function priceText(trade: Trade): string {
+function priceText(trade: Trade, instrument: Instrument | undefined): string {
   const price = trade.fill?.price ?? trade.request.price;
-  return formatPrice(price, inferPrecision(price).priceDecimals);
+  const priceDecimals = instrument?.priceDecimals ?? inferPrecision(price).priceDecimals;
+  return formatPrice(price, priceDecimals);
 }
 
 const STATUS_TEXT = { pending: 'Pending', filled: 'Filled', rejected: 'Rejected' } as const;
 
 export function Blotter() {
-  const { trading } = useServices();
+  const { trading, instruments } = useServices();
   const trades = useValue(trading.trades);
+  const instrumentBySymbol = useMemo(() => new Map(instruments.map((i) => [i.symbol, i])), [instruments]);
 
   return (
     <section className="panel blotter" aria-label="Trades">
@@ -46,17 +52,20 @@ export function Blotter() {
               </tr>
             </thead>
             <tbody>
-              {trades.map((t) => (
-                <tr key={t.id} data-status={t.status}>
-                  <td>{timeFormat.format(t.requestedAt)}</td>
-                  <td>{t.request.symbol}</td>
-                  <td data-side={t.request.side}>{t.request.side === 'buy' ? 'Buy' : 'Sell'}</td>
-                  <td className="num">{amountText(t)}</td>
-                  <td className="num">{priceText(t)}</td>
-                  <td>{providerLabel(t.request.provider)}</td>
-                  <td title={t.rejectReason}>{STATUS_TEXT[t.status]}</td>
-                </tr>
-              ))}
+              {trades.map((t) => {
+                const instrument = instrumentBySymbol.get(t.request.symbol);
+                return (
+                  <tr key={t.id} data-status={t.status}>
+                    <td>{timeFormat.format(t.requestedAt)}</td>
+                    <td>{t.request.symbol}</td>
+                    <td data-side={t.request.side}>{t.request.side === 'buy' ? 'Buy' : 'Sell'}</td>
+                    <td className="num">{amountText(t, instrument)}</td>
+                    <td className="num">{priceText(t, instrument)}</td>
+                    <td>{providerLabel(t.request.provider)}</td>
+                    <td title={t.rejectReason}>{STATUS_TEXT[t.status]}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
