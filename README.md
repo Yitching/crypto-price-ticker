@@ -22,6 +22,27 @@ URL flags (also linked in the header):
 | `&conflate=off` | Send every update straight to the UI, for before/after comparison |
 | `&worker=off` | Run the feed on the main thread instead of a Web Worker |
 
+## Using it
+
+- Click a price to trade at it, immediately, at whatever's on screen. There's no confirmation step — that's deliberate, it's what makes the last-look rejection meaningful.
+- The ⇄ button switches whether your amount is in the base currency (BTC) or the quote currency (USD).
+- "All venues" on a tile expands the per-exchange book behind the aggregate price.
+- In Board view, click a row (or arrow up/down) to dock it in the ticket on the right.
+- Every trade lands in the blotter as Pending, then resolves to Filled or Rejected 150–450ms later — that delay is the simulated round trip to the venue.
+
+If you're not from a trading background, a few terms recur through the code and UI:
+
+| Term | Meaning |
+|---|---|
+| Bid / ask | The best price anyone will buy at / sell at, across every connected venue |
+| Spread | Ask minus bid, in pips. Negative ("Crossed") means one venue's bid beat another venue's ask |
+| Pip / big figure | FX convention for splitting a price into a large, boring prefix (the big figure) and a small, meaningful pair of digits (the pips) drawn large, because that's the part that's actually moving |
+| Dealt currency | Which side of the pair your amount is denominated in — 10k could mean 10,000 BTC or 10,000 USD |
+| bps (basis points) | 1/100th of a percent. 10 bps = 0.10% |
+| Last look | A liquidity provider's right to a brief re-check of the price before confirming a trade, and to reject it if it moved too far against them. `SimulatedVenue` implements exactly this |
+| Blotter | The trade log — what you asked for, and how it was actually filled or rejected |
+| Conflation | Collapsing many rapid updates for the same pair into just the latest one before it reaches React |
+
 ## Architecture
 
 ```mermaid

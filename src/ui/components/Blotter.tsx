@@ -9,14 +9,24 @@ import { formatPrice, formatQuantity } from '../../utils/priceFormat';
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-/** Falls back to a guess only for a symbol that has since left the instrument list. */
+/** Base currency has real trading precision; the quote currency doesn't, so treat it as money. */
+function formatDealtAmount(amount: number, currency: string, base: string, instrument: Instrument | undefined): string {
+  const decimals = currency === base ? (instrument?.sizeDecimals ?? 6) : 2;
+  return `${formatQuantity(amount, decimals)} ${currency}`;
+}
+
+/**
+ * What was actually typed, in the currency it was typed in — never silently
+ * relabelled into the other currency. A fill also shows what it converted
+ * to, since that's the number that actually executed; a pending or rejected
+ * trade has no such conversion to show.
+ */
 function amountText(trade: Trade, instrument: Instrument | undefined): string {
-  const sizeDecimals = instrument?.sizeDecimals ?? 6;
-  if (trade.fill) {
-    const base = baseCurrency(trade.request.symbol);
-    return `${formatQuantity(trade.fill.baseAmount, sizeDecimals)} ${base}`;
-  }
-  return `${formatQuantity(trade.request.amount, sizeDecimals)} ${trade.request.dealtCurrency}`;
+  const base = baseCurrency(trade.request.symbol);
+  const dealt = formatDealtAmount(trade.request.amount, trade.request.dealtCurrency, base, instrument);
+  if (!trade.fill || trade.request.dealtCurrency === base) return dealt;
+  const converted = formatDealtAmount(trade.fill.baseAmount, base, base, instrument);
+  return `${dealt} → ${converted}`;
 }
 
 function priceText(trade: Trade, instrument: Instrument | undefined): string {
@@ -45,7 +55,7 @@ export function Blotter() {
                 <th scope="col">Time</th>
                 <th scope="col">Pair</th>
                 <th scope="col">Side</th>
-                <th scope="col" className="num">Amount</th>
+                <th scope="col" className="num amount-col">Amount</th>
                 <th scope="col" className="num">Price</th>
                 <th scope="col">Venue</th>
                 <th scope="col">Status</th>
@@ -59,7 +69,7 @@ export function Blotter() {
                     <td>{timeFormat.format(t.requestedAt)}</td>
                     <td>{t.request.symbol}</td>
                     <td data-side={t.request.side}>{t.request.side === 'buy' ? 'Buy' : 'Sell'}</td>
-                    <td className="num">{amountText(t, instrument)}</td>
+                    <td className="num amount-col">{amountText(t, instrument)}</td>
                     <td className="num">{priceText(t, instrument)}</td>
                     <td>{providerLabel(t.request.provider)}</td>
                     <td title={t.rejectReason}>{STATUS_TEXT[t.status]}</td>

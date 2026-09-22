@@ -100,7 +100,7 @@ input {
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 440px;
+  grid-template-columns: minmax(0, 1fr) 560px;
   gap: 16px;
   padding: 16px;
   align-items: start;
@@ -285,7 +285,10 @@ input {
 
 .tile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  /* Fixed-ish track size (no 1fr) so tiles keep their natural width and pack
+     to the start of the row instead of stretching to fill it. */
+  grid-template-columns: repeat(auto-fill, minmax(270px, 300px));
+  justify-content: start;
   align-items: start;
   gap: 10px;
 }
@@ -656,7 +659,7 @@ input {
 }
 
 .blotter-scroll {
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - 100px);
   overflow: auto;
 }
 
@@ -667,6 +670,13 @@ input {
   font-size: 12px;
   text-align: left;
   white-space: nowrap;
+}
+
+/* The amount column can carry "50,000 USD → 496,426 DOGE"; wrap it instead of
+   forcing the whole table wider and triggering a horizontal scrollbar. */
+.blotter .amount-col {
+  max-width: 200px;
+  white-space: normal;
 }
 
 .blotter th {
