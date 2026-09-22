@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AggregatedQuote } from '../core/types';
-import { QuoteStore } from './QuoteStore';
+import { QuoteStore, immediateScheduler } from './QuoteStore';
 
 const quote = (symbol: string, bid: number): AggregatedQuote => ({
   symbol,
@@ -11,7 +11,7 @@ const quote = (symbol: string, bid: number): AggregatedQuote => ({
 
 describe('QuoteStore', () => {
   it('notifies only subscribers of the symbol that changed', () => {
-    const store = new QuoteStore();
+    const store = new QuoteStore(immediateScheduler);
     const btc = vi.fn();
     const eth = vi.fn();
     store.subscribe('BTC/USD', btc);
@@ -23,7 +23,7 @@ describe('QuoteStore', () => {
   });
 
   it('stops notifying after unsubscribe', () => {
-    const store = new QuoteStore();
+    const store = new QuoteStore(immediateScheduler);
     const listener = vi.fn();
     const unsubscribe = store.subscribe('BTC/USD', listener);
     unsubscribe();

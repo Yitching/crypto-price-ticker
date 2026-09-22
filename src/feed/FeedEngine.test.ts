@@ -24,8 +24,9 @@ describe('FeedEngine', () => {
 
   it('turns many ticks into one update per symbol per flush', () => {
     const batches: (readonly AggregatedQuote[])[] = [];
-    const engine = new FeedEngine({ quotes: (b) => batches.push(b), status: () => {}, stats: () => {} });
     const adapter = new FakeAdapter();
+    // Hand the fake to the engine; otherwise it asks the real registry, which has no 'fake' provider.
+    const engine = new FeedEngine({ quotes: (b) => batches.push(b), status: () => {}, stats: () => {} }, () => adapter);
     engine.start({
       symbols: ['BTC/USD', 'ETH/USD'],
       providers: [{ kind: 'fake' }],
