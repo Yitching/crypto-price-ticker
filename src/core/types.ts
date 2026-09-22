@@ -24,3 +24,22 @@ export interface AggregatedQuote {
 }
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'closed';
+
+export type Side = 'buy' | 'sell';
+
+/** Display and trading precision for one pair. */
+export interface Instrument {
+  readonly symbol: string;
+  readonly base: string;
+  readonly quote: string;
+  /** Decimals shown for prices. */
+  readonly priceDecimals: number;
+  /**
+   * Decimal position of the last "pip" digit. The two digits ending here are drawn large,
+   * like the big figure / pips split on FX tiles. 0 = units, negative = tens and above.
+   */
+  readonly pipDecimals: number;
+  /** Decimals allowed for a base-currency amount. */
+  readonly sizeDecimals: number;
+  readonly defaultAmount: number;
+}

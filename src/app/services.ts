@@ -1,7 +1,10 @@
 import { createContext, useContext } from 'react';
-import { LIVE_SYMBOLS, stressSymbols } from '../config/symbols';
+import { stressInstruments } from '../config/symbols';
+import { LIVE_INSTRUMENTS } from '../core/instruments';
 import { QuoteStore, frameScheduler, immediateScheduler } from '../store/QuoteStore';
 import { ValueStore } from '../store/ValueStore';
+import { SimulatedVenue } from '../trading/SimulatedVenue';
+import { TradeService } from '../trading/TradeService';
 import { createFeedClient } from '../feed/FeedClient';
 import type { FeedStats } from '../feed/FeedEngine';
 import type { ProviderSpec } from '../providers/types';
@@ -16,7 +19,8 @@ export interface AppConfig {
 
 /** Composition root: builds and starts everything, once. */
 export function createServices(config: AppConfig) {
-  const symbols = config.mode === 'stress' ? stressSymbols(config.stressCount) : [...LIVE_SYMBOLS];
+  const instruments = config.mode === 'stress' ? stressInstruments(config.stressCount) : [...LIVE_INSTRUMENTS];
+  const symbols = instruments.map((i) => i.symbol);
   const quotes = new QuoteStore(config.conflate ? frameScheduler : immediateScheduler);
   const statuses = new ValueStore<Record<string, string>>({});
   const stats = new ValueStore<FeedStats | null>(null);
@@ -42,7 +46,11 @@ export function createServices(config: AppConfig) {
     options: { flushIntervalMs: 16, staleAfterMs: 30_000, conflate: config.conflate },
   });
 
-  return { config, symbols, quotes, statuses, stats, feed };}
+  // Trades execute against the price that is on screen.
+  const trading = new TradeService(new SimulatedVenue((symbol) => quotes.get(symbol)));
+
+  return { config, instruments, symbols, quotes, statuses, stats, feed, trading };
+}
 
 export type Services = ReturnType<typeof createServices>;
 

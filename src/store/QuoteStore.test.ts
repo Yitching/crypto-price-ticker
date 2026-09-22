@@ -49,3 +49,13 @@ describe('QuoteStore', () => {
     expect(store.get('BTC/USD')?.bid?.price).toBe(102);
   });
 });
+describe('QuoteStore price movement', () => {
+  it('tracks direction, previous price and a sequence that bumps only when a side moves', () => {
+    const store = new QuoteStore(immediateScheduler);
+    store.ingest([quote('X', 10)]);
+    store.ingest([quote('X', 12)]);
+    expect(store.get('X')).toMatchObject({ bidMove: 1, bidSeq: 1, bidPrev: 10, askMove: 1, askPrev: 11 });
+    store.ingest([{ ...quote('X', 12), ask: { price: 12, provider: 'kraken' } }]);
+    expect(store.get('X')).toMatchObject({ bidSeq: 1, askMove: -1, askSeq: 2, askPrev: 13 });
+  });
+});
